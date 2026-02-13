@@ -1,0 +1,32 @@
+name: stream_live_v2
+description: "A new Flutter project."
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.10.8
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+  dio: ^5.9.1
+  stream_video_flutter: ^1.2.4
+  stream_video: ^1.2.4
+  stream_chat_flutter: ^9.23.0
+  stream_chat: ^9.23.0
+  file_picker: ^10.3.10
+  permission_handler: ^12.0.1
+  intl: ^0.20.2
+
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
+
