@@ -5,8 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:stream_video_flutter/stream_video_flutter.dart';
 
-const String kDefaultBackendUrl = 'http://10.0.2.2:4000';
-const String kStreamApiKey = String.fromEnvironment('STREAM_API_KEY');
+const String kDefaultBackendUrl = 'http://10.109.158.15:4000';
+const String kStreamApiKey = 'fcubju5h3kva';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -167,7 +167,11 @@ class _LoginScreenState extends State<LoginScreen> {
 
       final client = StreamVideo(
         kStreamApiKey,
-        user: User.regular(userId: auth.empId, name: auth.empId, role: auth.role),
+        user: User.regular(
+          userId: auth.empId,
+          name: auth.empId,
+          role: auth.role,
+        ),
         userToken: auth.streamToken,
         options: const StreamVideoOptions(autoConnect: false),
       );
@@ -191,6 +195,7 @@ class _LoginScreenState extends State<LoginScreen> {
         ),
       );
     } catch (error) {
+      print('error _signIn :: ${error}');
       messenger.showSnackBar(SnackBar(content: Text('Login failed: $error')));
     } finally {
       if (mounted) {
@@ -279,7 +284,9 @@ class _DoctorLiveScreenState extends State<DoctorLiveScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _SetupCard(text: 'Backend: ${widget.backendUrl}\nCall ID: ${widget.callId}'),
+        _SetupCard(
+          text: 'Backend: ${widget.backendUrl}\nCall ID: ${widget.callId}',
+        ),
         const SizedBox(height: 12),
         Text(_status),
         const SizedBox(height: 16),
@@ -341,7 +348,6 @@ class _DoctorLiveScreenState extends State<DoctorLiveScreen> {
       final result = await call.getOrCreate(
         video: true,
         watch: true,
-        backstage: const StreamBackstageSettings(enabled: true),
       );
 
       if (result.isFailure) {
@@ -422,6 +428,7 @@ class _DoctorLiveScreenState extends State<DoctorLiveScreen> {
     try {
       await action();
     } catch (error) {
+      print('error _runBusy :: $error');
       messenger.showSnackBar(SnackBar(content: Text('$error')));
       setState(() {
         _status = 'Action failed. Check backend and Stream credentials.';
@@ -435,10 +442,7 @@ class _DoctorLiveScreenState extends State<DoctorLiveScreen> {
 }
 
 class ViewerLiveScreen extends StatefulWidget {
-  const ViewerLiveScreen({
-    super.key,
-    required this.callId,
-  });
+  const ViewerLiveScreen({super.key, required this.callId});
 
   final String callId;
 
@@ -449,6 +453,13 @@ class ViewerLiveScreen extends StatefulWidget {
 class _ViewerLiveScreenState extends State<ViewerLiveScreen> {
   bool _busy = false;
   String _status = 'Tap "Watch Livestream" after doctor starts live.';
+  Call? _activeViewerCall;
+
+  @override
+  void dispose() {
+    unawaited(_activeViewerCall?.leave());
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -479,6 +490,11 @@ class _ViewerLiveScreenState extends State<ViewerLiveScreen> {
     });
 
     try {
+      if (_activeViewerCall != null) {
+        await _activeViewerCall!.leave();
+        _activeViewerCall = null;
+      }
+
       final call = StreamVideo.instance.makeCall(
         callType: StreamCallType.liveStream(),
         id: widget.callId,
@@ -491,11 +507,11 @@ class _ViewerLiveScreenState extends State<ViewerLiveScreen> {
       }
 
       if (!mounted) return;
-      await Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (_) => ViewerPlayerPage(call: call),
-        ),
-      );
+      _activeViewerCall = call;
+      await Navigator.of(
+        context,
+      ).push(MaterialPageRoute(builder: (_) => ViewerPlayerPage(call: call)));
+      _activeViewerCall = null;
 
       setState(() {
         _status = 'Rejoin anytime using Watch Livestream.';
@@ -514,23 +530,36 @@ class _ViewerLiveScreenState extends State<ViewerLiveScreen> {
 }
 
 class ViewerPlayerPage extends StatelessWidget {
-  const ViewerPlayerPage({
-    super.key,
-    required this.call,
-  });
+  const ViewerPlayerPage({super.key, required this.call});
 
   final Call call;
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Live Stream')),
-      body: LivestreamPlayer(
-        call: call,
-        joinBehaviour: LivestreamJoinBehaviour.autoJoinAsap,
-        connectOptions: CallConnectOptions(
-          camera: TrackOption.disabled(),
-          microphone: TrackOption.disabled(),
+    return PopScope(
+      onPopInvokedWithResult: (didPop, result) async {
+        await call.leave();
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('Live Stream'),
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back),
+            onPressed: () async {
+              await call.leave();
+              if (context.mounted) {
+                Navigator.of(context).pop();
+              }
+            },
+          ),
+        ),
+        body: LivestreamPlayer(
+          call: call,
+          joinBehaviour: LivestreamJoinBehaviour.autoJoinAsap,
+          connectOptions: CallConnectOptions(
+            camera: TrackOption.disabled(),
+            microphone: TrackOption.disabled(),
+          ),
         ),
       ),
     );
@@ -545,23 +574,20 @@ class _SetupCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Text(text),
-      ),
+      child: Padding(padding: const EdgeInsets.all(12), child: Text(text)),
     );
   }
 }
 
 class AuthApi {
   AuthApi({required this.baseUrl})
-      : _dio = Dio(
-          BaseOptions(
-            baseUrl: baseUrl,
-            connectTimeout: const Duration(seconds: 10),
-            receiveTimeout: const Duration(seconds: 10),
-          ),
-        );
+    : _dio = Dio(
+        BaseOptions(
+          baseUrl: baseUrl,
+          connectTimeout: const Duration(seconds: 10),
+          receiveTimeout: const Duration(seconds: 10),
+        ),
+      );
 
   final String baseUrl;
   final Dio _dio;
@@ -573,10 +599,7 @@ class AuthApi {
     try {
       final loginResponse = await _dio.post<Map<String, dynamic>>(
         '/api/login',
-        data: {
-          'empId': empId,
-          'role': role,
-        },
+        data: {'empId': empId, 'role': role},
       );
 
       final loginData = loginResponse.data;
@@ -611,6 +634,7 @@ class AuthApi {
         streamToken: streamToken,
       );
     } on DioException catch (error) {
+      print('error :: $error');
       throw Exception(
         error.response?.data?.toString() ??
             error.message ??
@@ -633,4 +657,3 @@ class AuthSession {
   final String accessToken;
   final String streamToken;
 }
-
